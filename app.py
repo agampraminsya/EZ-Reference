@@ -2,119 +2,97 @@ import streamlit as st
 import trafilatura
 import cloudscraper
 import streamlit.components.v1 as components
+import random
+import time
 
-st.set_page_config(page_title="EZ-Reference", page_icon="📝")
+st.set_page_config(page_title="EZ-Reference Pro", page_icon="📝")
 
-st.title("📝 EZ-Reference: Multi-Source Collector")
-st.caption(f"EZ-Reference: Partner resetmu | by @denmasagam v1.0")
+# --- DATABASE IDENTITAS (RANDOM AGENT) ---
+USER_AGENTS = [
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36',
+    'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
+    'Mozilla/5.0 (iPhone; CPU iPhone OS 17_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1 Mobile/15E148 Safari/604.1',
+    'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)'
+]
 
+st.title("📝 EZ-Reference Pro (Anti-Bot Edition)")
+st.caption("Batas: 10 Artikel per Sesi | Max 20 Artikel per Hari")
+
+# Inisialisasi State
 if 'daftar_artikel' not in st.session_state:
     st.session_state['daftar_artikel'] = []
+if 'total_generated' not in st.session_state:
+    st.session_state['total_generated'] = 0
+
+# --- CEK COOLDOWN GLOBAL (SIMULASI) ---
+if st.session_state['total_generated'] >= 20:
+    st.error("🚨 Kamu sudah mencapai batas maksimal 20 artikel per hari. Silakan kembali besok!")
+    st.stop() # Hentikan aplikasi untuk user ini
 
 # --- FORM INPUT ---
 with st.form(key='input_form', clear_on_submit=True):
     st.subheader("➕ Tambah Sumber Baru")
-    nama_web = st.text_input("Nama Website (Misal: Nature, BBC, Kompas)")
+    nama_web = st.text_input("Nama Website")
     url = st.text_input("Link Artikel")
     submit_button = st.form_submit_button(label="Tambahkan ke Daftar")
 
     if submit_button:
-        if nama_web and url:
-            with st.spinner('Sabar yaa, masih diproses.'):
+        # Cek Batasan Sesi (10 Artikel)
+        if len(st.session_state['daftar_artikel']) >= 10:
+            st.warning("⚠️ Batas maksimal per sesi adalah 10 artikel. Silakan download dulu, lalu hapus daftar.")
+        elif nama_web and url:
+            with st.spinner('Sedang memproses... (Memberikan jeda agar aman)'):
                 try:
+                    # Taktik 1: Jeda Acak (Human-like behavior)
+                    time.sleep(random.uniform(1, 3))
+                    
+                    # Taktik 2: Pilih Identitas Acak
+                    agent = random.choice(USER_AGENTS)
                     scraper = cloudscraper.create_scraper()
                     headers = {
-                        'User-Agent': 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)',
+                        'User-Agent': agent,
                         'Referer': 'https://www.google.com/',
-                        'Accept-Language': 'id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7'
                     }
+                    
                     response = scraper.get(url, headers=headers, timeout=15)
                     
                     if response.status_code == 200:
                         teks = trafilatura.extract(response.text)
                         if teks:
-                            st.session_state['daftar_artikel'].append({
-                                'nama': nama_web,
-                                'isi': teks,
-                                'url': url
-                            })
-                            st.toast(f"✅ {nama_web} berhasil dikoleksi!", icon="🚀")
+                            st.session_state['daftar_artikel'].append({'nama': nama_web, 'isi': teks, 'url': url})
+                            st.session_state['total_generated'] += 1
+                            st.toast(f"✅ Berhasil! (Identitas: {agent[:20]}...)")
                         else:
-                            st.error("Teks tidak terbaca, web ini memiliki sistem pengaman tertentu. Coba pilih web lain.")
+                            st.error("Teks tidak terbaca.")
                     else:
-                        st.error(f"Status {response.status_code}: Website ini memblokir akses kami, mohon maaf ya. Coba pilih web lain.")
+                        st.error(f"Ditolak Website (Status: {response.status_code})")
                 except Exception as e:
-                    st.error(f"Kesalahan teknis: {e}")
+                    st.error(f"Kesalahan: {e}")
         else:
-            st.warning("Data harus diisi lengkap ya!")
+            st.warning("Isi data dulu ya, Gam!")
 
-# --- MANAJEMEN DAFTAR & OUTPUT ---
+# --- MANAJEMEN DAFTAR ---
 if st.session_state['daftar_artikel']:
     st.divider()
-    st.subheader(f"🗂️ Koleksi Riset ({len(st.session_state['daftar_artikel'])} Sumber)")
-    
     file_gabungan = ""
     for index, item in enumerate(st.session_state['daftar_artikel']):
-        c_info, c_del = st.columns([0.8, 0.2])
-        with c_info:
-            st.write(f"**{index+1}. {item['nama']}**")
-            st.caption(item['url'])
-        with c_del:
-            if st.button("Hapus", key=f"del_{index}"):
-                st.session_state['daftar_artikel'].pop(index)
-                st.rerun()
-        
-        file_gabungan += f"Ini sumber dari {item['nama']}:\nURL: {item['url']}\n\n{item['isi']}\n\n"
-        file_gabungan += "="*60 + "\n\n"
-
-    # --- KOTAKAN HASIL & TOMBOL COPY ---
-    st.subheader("Hasil Copy-an")
-    
-    # Tombol Copy Menggunakan JavaScript
-    # Link Streamlit Cloud sudah otomatis HTTPS, jadi fitur clipboard ini akan jalan.
-    copy_code = f"""
-    <script>
-    function copyToClipboard() {{
-        const text = `{file_gabungan}`;
-        navigator.clipboard.writeText(text).then(() => {{
-            alert('Teks berhasil disalin ke Clipboard!');
-        }});
-    }}
-    </script>
-    <button onclick="copyToClipboard()" style="
-        background-color: #464646;
-        color: white;
-        padding: 10px 20px;
-        border: none;
-        border-radius: 4px;
-        cursor: pointer;
-        font-size: 16px;
-        width: 100%;
-        margin-bottom: 10px;
-    ">📋 Copy to Clipboard</button>
-    """
-    components.html(copy_code, height=60)
-
-    st.text_area(
-        label="Hasil Teks:", 
-        value=file_gabungan, 
-        height=300
-    )
-
-    st.write("---")
-    col_dl, col_clr = st.columns(2)
-    with col_dl:
-        st.download_button(
-            label="📥 Download File .txt", 
-            data=file_gabungan, 
-            file_name="EZ_Reference_Riset.txt"
-        )
-    with col_clr:
-        if st.button("🗑️ Kosongkan Semua"):
-            st.session_state['daftar_artikel'] = []
+        c1, c2 = st.columns([0.8, 0.2])
+        c1.write(f"**{index+1}. {item['nama']}**")
+        if c2.button("Hapus", key=f"del_{index}"):
+            st.session_state['daftar_artikel'].pop(index)
             st.rerun()
+        file_gabungan += f"Sumber: {item['nama']}\nURL: {item['url']}\n\n{item['isi']}\n\n{'='*50}\n\n"
 
-# --- FOOTER ---
+    # Tombol Copy (JS)
+    copy_js = f"""<script>function copy() {{ navigator.clipboard.writeText(`{file_gabungan}`); alert('Teks tersalin!'); }}</script>
+    <button onclick="copy()" style="width:100%; padding:10px; background:#4CAF50; color:white; border:none; border-radius:5px;">📋 Copy Semua Teks</button>"""
+    components.html(copy_js, height=60)
+    
+    st.download_button("📥 Download .txt", data=file_gabungan, file_name="Riset_Referensi.txt")
+    if st.button("🗑️ Bersihkan Sesi"):
+        st.session_state['daftar_artikel'] = []
+        st.rerun()
+
 st.markdown("---")
-st.info("**Tentang Laman Ini:**")
-st.caption("Laman ini mempermudah pengumpulan referensi artikel internet tanpa membuang waktu membaca satu per satu. File .txt yang diunduh bisa dimasukkan ke LLM AI (ChatGPT, Gemini, Claude) untuk dijelaskan ulang.")
+st.caption("Peringatan: Alat ini menggunakan rotasi identitas untuk keamanan IP.")
