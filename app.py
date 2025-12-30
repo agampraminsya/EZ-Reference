@@ -109,7 +109,7 @@ if st.session_state['daftar']:
         if c2.button("Hapus", key=f"h_{i}"):
             st.session_state['daftar'].pop(i)
             st.rerun()
-        gabungan += f"Sumber: {item['nama']}\nURL: {item['url']}\n\n{item['isi']}\n\n{'='*50}\n\n"
+        gabungan += f"Ini sumber dari: {item['nama']}\nURL: {item['url']}\n\n{item['isi']}\n\n{'='*50}\n\n"
 
     # Tombol Copy Otomatis
     js_copy = f"""<script>function copy() {{ navigator.clipboard.writeText(`{gabungan}`); alert('Teks disalin!'); }}</script>
