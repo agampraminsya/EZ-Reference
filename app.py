@@ -79,5 +79,4 @@ if st.session_state['daftar_artikel']:
 
 # Deskripsi
 st.markdown("---")
-st.info("**Tentang Laman Ini:**")
 st.caption("Laman ini berguna untuk mengumpulkan banyak artikel menjadi satu file .txt agar mudah dianalisis oleh AI (ChatGPT, Gemini, dsb), menghemat waktu baca tanpa kehilangan esensi referensi.")
