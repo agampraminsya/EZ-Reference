@@ -23,86 +23,69 @@ def connect_to_sheets():
         st.error(f"Gagal koneksi database: {e}")
         return None
 
-# --- JAVASCRIPT UNTUK DEVICE ID (ANTI-IP RESET) ---
-# Skrip ini akan membuat ID unik satu kali dan menyimpannya di browser kamu selamanya.
-if 'device_id' not in st.session_state:
-    st.session_state['device_id'] = None
+# --- LOGIKA IDENTITAS (UID) ---
+# Mengambil ID dari alamat URL
+uid = st.query_params.get("uid")
 
-components.html(
-    """
-    <script>
-    let deviceId = localStorage.getItem('ez_ref_device_id');
-    if (!deviceId) {
-        deviceId = 'USER-' + Math.random().toString(36).substr(2, 9).toUpperCase();
-        localStorage.setItem('ez_ref_device_id', deviceId);
-    }
-    window.parent.postMessage({type: 'set_device_id', value: deviceId}, '*');
-    </script>
-    """,
-    height=0,
-)
+if not uid:
+    st.warning("🔒 Mengaktifkan Sistem Keamanan Kuota...")
+    # Skrip JS untuk membuat ID dan menyimpannya secara permanen di browser
+    components.html(
+        """
+        <script>
+        let deviceId = localStorage.getItem('ez_ref_uid');
+        if (!deviceId) {
+            deviceId = 'GAM-' + Math.random().toString(36).substr(2, 9).toUpperCase();
+            localStorage.setItem('ez_ref_uid', deviceId);
+        }
+        // Mengarahkan URL agar menyertakan UID tersebut
+        const url = new URL(window.location.href);
+        url.searchParams.set('uid', deviceId);
+        window.parent.location.href = url.href;
+        </script>
+        """,
+        height=100,
+    )
+    st.info("Sedang menyiapkan identitas perangkatmu, tunggu sebentar...")
+    st.stop()
 
-# Menangkap ID dari JavaScript
-def handle_message():
-    if "device_id_msg" in st.query_params:
-        st.session_state['device_id'] = st.query_params["device_id_msg"]
-
-# Trik sederhana menangkap ID di Streamlit Cloud
-device_id_input = st.text_input("Device ID terdeteksi:", key="id_detect", value=st.session_state.get('device_id', 'Mendeteksi...'), disabled=True)
-
-def get_usage_count(uid):
+# --- FUNGSI DATABASE ---
+def get_usage_count(user_id):
     sheet = connect_to_sheets()
-    if sheet and uid and uid != "Mendeteksi...":
+    if sheet:
         try:
             tz_jkt = pytz.timezone('Asia/Jakarta')
             today = datetime.now(tz_jkt).strftime("%Y-%m-%d")
             all_rows = sheet.get_all_values()
             count = 0
             for row in all_rows[1:]:
+                # Cek Kolom A (Tanggal) dan Kolom B (UID)
                 if len(row) >= 2:
-                    # Kita cek Kolom B (IP/UID) sekarang berisi Device ID
-                    if today in str(row[0]) and str(row[1]).strip() == uid:
+                    if today in str(row[0]) and str(row[1]).strip() == user_id:
                         count += 1
             return count
         except: return 0
     return 0
 
-def log_usage(uid, nama_web, url):
+def log_usage(user_id, nama_web, url):
     sheet = connect_to_sheets()
     if sheet:
         try:
             tz_jkt = pytz.timezone('Asia/Jakarta')
             today = datetime.now(tz_jkt).strftime("%Y-%m-%d")
-            sheet.append_row([f"'{today}", uid, nama_web, url])
+            # Pakai tanda petik agar format tanggal tidak dirubah Google
+            sheet.append_row([f"'{today}", user_id, nama_web, url])
             return True
         except: return False
     return False
 
 # --- LOGIKA UTAMA ---
-# Menggunakan Query Params untuk sinkronisasi ID dari JS ke Python
-query_params = st.query_params
-if "uid" in query_params:
-    current_uid = query_params["uid"]
-else:
-    # Mengarahkan ulang satu kali untuk mengunci ID di URL
-    st.markdown(f"""
-        <script>
-        let dId = localStorage.getItem('ez_ref_device_id');
-        if (dId) {{
-            const url = new URL(window.location.href);
-            url.searchParams.set('uid', dId);
-            window.parent.location.href = url.href;
-        }}
-        </script>
-    """, unsafe_allow_html=True)
-    st.stop()
-
-usage_now = get_usage_count(current_uid)
+usage_now = get_usage_count(uid)
 limit_harian = 20
 sisa_kuota = limit_harian - usage_now
 
 st.title("📝 EZ-Reference Pro")
-st.caption(f"Sisa Kuota Hari Ini: {max(0, sisa_kuota)} artikel")
+st.caption(f"ID Perangkat: {uid} | Sisa Kuota: {max(0, sisa_kuota)}")
 
 if sisa_kuota <= 0:
     st.error("🚨 Batas harian 20 artikel tercapai. Silakan kembali besok!")
@@ -129,14 +112,14 @@ with st.form(key='input_form', clear_on_submit=True):
                     if res.status_code == 200:
                         teks = trafilatura.extract(res.text)
                         if teks:
-                            if log_usage(current_uid, nama_web, url):
+                            if log_usage(uid, nama_web, url):
                                 st.session_state['daftar'].append({'nama': nama_web, 'isi': teks, 'url': url})
                                 st.rerun()
                         else: st.error("Teks tidak terbaca.")
                     else: st.error(f"Ditolak Website (Status {res.status_code})")
                 except Exception as e: st.error(f"Error: {e}")
         else:
-            st.warning("Mohon isi semua kolom.")
+            st.warning("Mohon isi semua kolom, Gam!")
 
 # Output
 if st.session_state['daftar']:
@@ -146,6 +129,7 @@ if st.session_state['daftar']:
         st.write(f"**{i+1}. {item['nama']}**")
         gabungan += f"Sumber: {item['nama']}\nURL: {item['url']}\n\n{item['isi']}\n\n{'='*50}\n\n"
 
+    # Tombol Copy (JavaScript)
     js_copy = f"""<script>function copy() {{ navigator.clipboard.writeText(`{gabungan}`); alert('Tersalin!'); }}</script>
     <button onclick="copy()" style="width:100%; padding:10px; background:#4CAF50; color:white; border:none; border-radius:5px; cursor:pointer;">📋 Copy ke Clipboard</button>"""
     components.html(js_copy, height=60)
