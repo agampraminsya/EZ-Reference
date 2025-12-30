@@ -5,6 +5,7 @@ import trafilatura
 import cloudscraper
 import streamlit.components.v1 as components
 from datetime import datetime
+import pytz
 import random
 import time
 
@@ -13,29 +14,39 @@ st.set_page_config(page_title="EZ-Reference Fix", page_icon="📝")
 # --- KONEKSI DATABASE ---
 @st.cache_resource
 def connect_to_sheets():
-    # Menambahkan scope Drive dan Sheets
     scope = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
     try:
         creds = Credentials.from_service_account_info(st.secrets["gcp_service_account"], scopes=scope)
         client = gspread.authorize(creds)
-        # Buka file Google Sheet kamu
         return client.open("Database_EZ_Reference").sheet1
     except Exception as e:
         st.error(f"Gagal koneksi database: {e}")
         return None
 
 def get_user_ip():
-    # Mengambil IP user (tidak ditampilkan ke UI)
     return st.context.headers.get("X-Forwarded-For", "127.0.0.1").split(",")[0]
 
 def get_usage_count(ip):
     sheet = connect_to_sheets()
     if sheet:
         try:
-            today = datetime.now().strftime("%Y-%m-%d")
-            records = sheet.get_all_records()
-            # Menghitung berapa kali IP ini muncul di tanggal hari ini
-            return sum(1 for row in records if str(row.get('ip_address')) == ip and str(row.get('tanggal')) == today)
+            # Set waktu ke WIB (Jakarta) agar sinkron dengan kamu di Kepanjen
+            tz_jkt = pytz.timezone('Asia/Jakarta')
+            today = datetime.now(tz_jkt).strftime("%Y-%m-%d")
+            
+            # Ambil semua baris (termasuk yang baru masuk)
+            all_rows = sheet.get_all_values()
+            
+            count = 0
+            # Kita cek satu-satu mulai dari baris kedua (lewati judul)
+            for row in all_rows[1:]:
+                # row[0] adalah Tanggal, row[1] adalah IP
+                if len(row) >= 2:
+                    db_tanggal = str(row[0]).strip()
+                    db_ip = str(row[1]).strip()
+                    if db_tanggal == today and db_ip == ip:
+                        count += 1
+            return count
         except:
             return 0
     return 0
@@ -44,12 +55,11 @@ def log_usage(ip, nama_web, url):
     sheet = connect_to_sheets()
     if sheet:
         try:
-            today = datetime.now().strftime("%Y-%m-%d")
-            # Menulis baris baru ke Google Sheet
+            tz_jkt = pytz.timezone('Asia/Jakarta')
+            today = datetime.now(tz_jkt).strftime("%Y-%m-%d")
             sheet.append_row([today, ip, nama_web, url])
             return True
-        except Exception as e:
-            st.error(f"Gagal mencatat ke Sheets: {e}")
+        except:
             return False
     return False
 
@@ -59,8 +69,9 @@ usage_now = get_usage_count(user_ip)
 limit_harian = 20
 sisa_kuota = limit_harian - usage_now
 
-st.title("📝 EZ-Reference: Fix Mode")
-st.caption(f"Sisa Kuota Hari Ini: {sisa_kuota} artikel")
+st.title("📝 EZ-Reference Pro")
+# Privasi: IP tidak ditampilkan, hanya sisa kuota
+st.caption(f"Sisa Kuota Hari Ini: {max(0, sisa_kuota)} artikel")
 
 if sisa_kuota <= 0:
     st.error("🚨 Batas harian 20 artikel tercapai. Silakan kembali besok!")
@@ -71,6 +82,7 @@ if 'daftar' not in st.session_state:
 
 # Form Input
 with st.form(key='input_form', clear_on_submit=True):
+    st.subheader("➕ Tambah Sumber Baru")
     nama_web = st.text_input("Nama Website")
     url = st.text_input("Link Artikel")
     submit = st.form_submit_button("Tambahkan")
@@ -78,7 +90,7 @@ with st.form(key='input_form', clear_on_submit=True):
     if submit:
         if nama_web and url:
             with st.spinner('Memproses...'):
-                time.sleep(1) # Jeda singkat
+                time.sleep(1)
                 scraper = cloudscraper.create_scraper()
                 headers = {'User-Agent': 'Mozilla/5.0 (compatible; Googlebot/2.1)', 'Referer': 'https://www.google.com/'}
                 try:
@@ -86,22 +98,15 @@ with st.form(key='input_form', clear_on_submit=True):
                     if res.status_code == 200:
                         teks = trafilatura.extract(res.text)
                         if teks:
-                            # 1. Catat dulu ke database
-                            berhasil_catat = log_usage(user_ip, nama_web, url)
-                            
-                            # 2. Jika berhasil catat, baru masukkan ke daftar tampilan
-                            if berhasil_catat:
+                            if log_usage(user_ip, nama_web, url):
                                 st.session_state['daftar'].append({'nama': nama_web, 'isi': teks, 'url': url})
-                                st.toast("✅ Berhasil dicatat ke database!")
+                                st.toast("✅ Berhasil masuk database!")
                                 st.rerun()
-                        else:
-                            st.error("Teks tidak terbaca.")
-                    else:
-                        st.error(f"Ditolak Website (Status {res.status_code})")
-                except Exception as e:
-                    st.error(f"Error teknis: {e}")
+                        else: st.error("Teks tidak terbaca.")
+                    else: st.error(f"Ditolak Website (Status {res.status_code})")
+                except Exception as e: st.error(f"Error: {e}")
         else:
-            st.warning("Isi semua kolom ya, Gam!")
+            st.warning("Isi semua kolom ya!")
 
 # --- OUTPUT ---
 if st.session_state['daftar']:
