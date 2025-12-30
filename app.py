@@ -2,20 +2,21 @@ import streamlit as st
 import trafilatura
 import cloudscraper
 
-# Pengaturan Tampilan Web
-st.set_page_config(page_title="Pencabut Teks Artikel", page_icon="📝")
+# Pengaturan halaman agar nyaman di HP
+st.set_page_config(page_title="Penyaring Teks Artikel", page_icon="📝")
 
-st.title("📝 Ekstraktor Artikel Referensi")
-st.write("Gunakan alat ini untuk mengambil referensi tulisan IDN Times kamu.")
+st.title("📝 Ekstraktor Referensi Artikel by Agam Praminsya")
+st.info("Format output akan otomatis disesuaikan untuk risetmu.")
 
-# Input User
-nama_web = st.text_input("1. Nama Website", placeholder="Contoh: BBC Science")
-url = st.text_input("2. Link Artikel", placeholder="https://...")
+# Dua input sesuai permintaanmu
+nama_web = st.text_input("1. Masukkan Nama Website", placeholder="Misal: BBC, Nature, dsb")
+url = st.text_input("2. Masukkan Link Artikel", placeholder="Tempel link https:// di sini")
 
-if st.button("Ambil Teks Utuh"):
+if st.button("Proses Teks"):
     if nama_web and url:
-        with st.spinner('Sedang memproses...'):
+        with st.spinner('Sedang mengambil teks...'):
             try:
+                # Menggunakan cloudscraper agar tidak diblokir proteksi web
                 scraper = cloudscraper.create_scraper()
                 response = scraper.get(url)
                 
@@ -23,23 +24,28 @@ if st.button("Ambil Teks Utuh"):
                     hasil_teks = trafilatura.extract(response.text)
                     
                     if hasil_teks:
-                        # Menampilkan hasil di web
-                        st.subheader(f"Sumber: {nama_web}")
-                        st.text_area("Hasil Ekstraksi:", hasil_teks, height=300)
+                        # MEMBUAT FORMAT SESUAI PERMINTAANMU
+                        output_final = f"Ini sumber dari {nama_web}:\n\n{hasil_teks}\n\n"
+                        output_final += "="*50 # Garis pembatas
                         
-                        # Tombol Download (Sebagai pengganti simpan otomatis ke MNY.txt)
-                        format_file = f"Ini sumber dari {nama_web}:\nURL: {url}\n\n{hasil_teks}\n"
+                        st.success(f"Berhasil mengekstrak dari {nama_web}!")
+                        
+                        # Menampilkan hasil di layar (bisa langsung di-copy)
+                        st.subheader("Hasil (Siap Copy-Paste):")
+                        st.text_area(label="Teks di bawah ini sudah sesuai format:", value=output_final, height=400)
+                        
+                        # Tombol download untuk jaga-jaga
                         st.download_button(
-                            label="📥 Download sebagai .txt",
-                            data=format_file,
-                            file_name=f"{nama_web}.txt",
+                            label="📥 Download Hasil sebagai .txt",
+                            data=output_final,
+                            file_name=f"Riset_{nama_web}.txt",
                             mime="text/plain"
                         )
                     else:
-                        st.error("Gagal mengambil teks. Website mungkin menggunakan format yang tidak terbaca.")
+                        st.error("Teks tidak ditemukan. Coba link artikel lain.")
                 else:
-                    st.error(f"Gagal tembus proteksi. Error code: {response.status_code}")
+                    st.error(f"Gagal akses website. Kode Error: {response.status_code}")
             except Exception as e:
-                st.error(f"Terjadi kesalahan: {e}")
+                st.error(f"Terjadi kesalahan teknis: {e}")
     else:
-        st.warning("Mohon isi nama website dan link terlebih dahulu.")
+        st.warning("Pastikan Nama Web dan Link sudah diisi ya, Gam!")
