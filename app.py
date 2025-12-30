@@ -1,136 +1,120 @@
 import streamlit as st
-import gspread
-from google.oauth2.service_account import Credentials
 import trafilatura
 import cloudscraper
 import streamlit.components.v1 as components
-from datetime import datetime
-import pytz
-import random
-import time
 
-st.set_page_config(page_title="EZ-Reference Pro", page_icon="📝")
+st.set_page_config(page_title="EZ-Reference", page_icon="📝")
 
-# --- KONEKSI DATABASE ---
-@st.cache_resource
-def connect_to_sheets():
-    scope = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
-    try:
-        creds = Credentials.from_service_account_info(st.secrets["gcp_service_account"], scopes=scope)
-        client = gspread.authorize(creds)
-        return client.open("Database_EZ_Reference").sheet1
-    except Exception as e:
-        st.error(f"Gagal koneksi database: {e}")
-        return None
+st.title("📝 EZ-Reference: Multi-Source Collector")
+st.caption(f"EZ-Reference: Partner resetmu | by @denmasagam v1.0")
 
-# --- LOGIKA IDENTITAS (UID) ---
-# Mengambil ID dari alamat URL
-uid = st.query_params.get("uid")
+if 'daftar_artikel' not in st.session_state:
+    st.session_state['daftar_artikel'] = []
 
-if not uid:
-    st.warning("🔒 Mengaktifkan Sistem Keamanan Kuota...")
-    # Skrip JS untuk membuat ID dan menyimpannya secara permanen di browser
-    components.html(
-        """
-        <script>
-        let deviceId = localStorage.getItem('ez_ref_uid');
-        if (!deviceId) {
-            deviceId = 'GAM-' + Math.random().toString(36).substr(2, 9).toUpperCase();
-            localStorage.setItem('ez_ref_uid', deviceId);
-        }
-        // Mengarahkan URL agar menyertakan UID tersebut
-        const url = new URL(window.location.href);
-        url.searchParams.set('uid', deviceId);
-        window.parent.location.href = url.href;
-        </script>
-        """,
-        height=100,
-    )
-    st.info("Sedang menyiapkan identitas perangkatmu, tunggu sebentar...")
-    st.stop()
-
-# --- FUNGSI DATABASE ---
-def get_usage_count(user_id):
-    sheet = connect_to_sheets()
-    if sheet:
-        try:
-            tz_jkt = pytz.timezone('Asia/Jakarta')
-            today = datetime.now(tz_jkt).strftime("%Y-%m-%d")
-            all_rows = sheet.get_all_values()
-            count = 0
-            for row in all_rows[1:]:
-                # Cek Kolom A (Tanggal) dan Kolom B (UID)
-                if len(row) >= 2:
-                    if today in str(row[0]) and str(row[1]).strip() == user_id:
-                        count += 1
-            return count
-        except: return 0
-    return 0
-
-def log_usage(user_id, nama_web, url):
-    sheet = connect_to_sheets()
-    if sheet:
-        try:
-            tz_jkt = pytz.timezone('Asia/Jakarta')
-            today = datetime.now(tz_jkt).strftime("%Y-%m-%d")
-            # Pakai tanda petik agar format tanggal tidak dirubah Google
-            sheet.append_row([f"'{today}", user_id, nama_web, url])
-            return True
-        except: return False
-    return False
-
-# --- LOGIKA UTAMA ---
-usage_now = get_usage_count(uid)
-limit_harian = 20
-sisa_kuota = limit_harian - usage_now
-
-st.title("📝 EZ-Reference Pro")
-st.caption(f"ID Perangkat: {uid} | Sisa Kuota: {max(0, sisa_kuota)}")
-
-if sisa_kuota <= 0:
-    st.error("🚨 Batas harian 20 artikel tercapai. Silakan kembali besok!")
-    st.stop()
-
-if 'daftar' not in st.session_state:
-    st.session_state['daftar'] = []
-
-# Form Input
+# --- FORM INPUT ---
 with st.form(key='input_form', clear_on_submit=True):
     st.subheader("➕ Tambah Sumber Baru")
-    nama_web = st.text_input("Nama Website")
+    nama_web = st.text_input("Nama Website (Misal: Nature, BBC, Kompas)")
     url = st.text_input("Link Artikel")
-    submit = st.form_submit_button("Tambahkan")
+    submit_button = st.form_submit_button(label="Tambahkan ke Daftar")
 
-    if submit:
+    if submit_button:
         if nama_web and url:
-            with st.spinner('Memproses...'):
-                time.sleep(1)
-                scraper = cloudscraper.create_scraper()
-                headers = {'User-Agent': 'Mozilla/5.0 (compatible; Googlebot/2.1)', 'Referer': 'https://www.google.com/'}
+            with st.spinner('Sabar yaa, masih diproses.'):
                 try:
-                    res = scraper.get(url, headers=headers, timeout=15)
-                    if res.status_code == 200:
-                        teks = trafilatura.extract(res.text)
+                    scraper = cloudscraper.create_scraper()
+                    headers = {
+                        'User-Agent': 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)',
+                        'Referer': 'https://www.google.com/',
+                        'Accept-Language': 'id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7'
+                    }
+                    response = scraper.get(url, headers=headers, timeout=15)
+                    
+                    if response.status_code == 200:
+                        teks = trafilatura.extract(response.text)
                         if teks:
-                            if log_usage(uid, nama_web, url):
-                                st.session_state['daftar'].append({'nama': nama_web, 'isi': teks, 'url': url})
-                                st.rerun()
-                        else: st.error("Teks tidak terbaca.")
-                    else: st.error(f"Ditolak Website (Status {res.status_code})")
-                except Exception as e: st.error(f"Error: {e}")
+                            st.session_state['daftar_artikel'].append({
+                                'nama': nama_web,
+                                'isi': teks,
+                                'url': url
+                            })
+                            st.toast(f"✅ {nama_web} berhasil dikoleksi!", icon="🚀")
+                        else:
+                            st.error("Teks tidak terbaca, web ini memiliki sistem pengaman tertentu. Coba pilih web lain.")
+                    else:
+                        st.error(f"Status {response.status_code}: Website ini memblokir akses kami, mohon maaf ya. Coba pilih web lain.")
+                except Exception as e:
+                    st.error(f"Kesalahan teknis: {e}")
         else:
-            st.warning("Mohon isi semua kolom, Gam!")
+            st.warning("Data harus diisi lengkap ya!")
 
-# Output
-if st.session_state['daftar']:
+# --- MANAJEMEN DAFTAR & OUTPUT ---
+if st.session_state['daftar_artikel']:
     st.divider()
-    gabungan = ""
-    for i, item in enumerate(st.session_state['daftar']):
-        st.write(f"**{i+1}. {item['nama']}**")
-        gabungan += f"Sumber: {item['nama']}\nURL: {item['url']}\n\n{item['isi']}\n\n{'='*50}\n\n"
+    st.subheader(f"🗂️ Koleksi Riset ({len(st.session_state['daftar_artikel'])} Sumber)")
+    
+    file_gabungan = ""
+    for index, item in enumerate(st.session_state['daftar_artikel']):
+        c_info, c_del = st.columns([0.8, 0.2])
+        with c_info:
+            st.write(f"**{index+1}. {item['nama']}**")
+            st.caption(item['url'])
+        with c_del:
+            if st.button("Hapus", key=f"del_{index}"):
+                st.session_state['daftar_artikel'].pop(index)
+                st.rerun()
+        
+        file_gabungan += f"Ini sumber dari {item['nama']}:\nURL: {item['url']}\n\n{item['isi']}\n\n"
+        file_gabungan += "="*60 + "\n\n"
 
-    # Tombol Copy (JavaScript)
-    js_copy = f"""<script>function copy() {{ navigator.clipboard.writeText(`{gabungan}`); alert('Tersalin!'); }}</script>
-    <button onclick="copy()" style="width:100%; padding:10px; background:#4CAF50; color:white; border:none; border-radius:5px; cursor:pointer;">📋 Copy ke Clipboard</button>"""
-    components.html(js_copy, height=60)
-    st.download_button("📥 Download .txt", data=gabungan, file_name="Riset_Referensi.txt")
+    # --- KOTAKAN HASIL & TOMBOL COPY ---
+    st.subheader("Hasil Copy-an")
+    
+    # Tombol Copy Menggunakan JavaScript
+    # Link Streamlit Cloud sudah otomatis HTTPS, jadi fitur clipboard ini akan jalan.
+    copy_code = f"""
+    <script>
+    function copyToClipboard() {{
+        const text = `{file_gabungan}`;
+        navigator.clipboard.writeText(text).then(() => {{
+            alert('Teks berhasil disalin ke Clipboard!');
+        }});
+    }}
+    </script>
+    <button onclick="copyToClipboard()" style="
+        background-color: #464646;
+        color: white;
+        padding: 10px 20px;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 16px;
+        width: 100%;
+        margin-bottom: 10px;
+    ">📋 Copy to Clipboard</button>
+    """
+    components.html(copy_code, height=60)
+
+    st.text_area(
+        label="Hasil Teks:", 
+        value=file_gabungan, 
+        height=300
+    )
+
+    st.write("---")
+    col_dl, col_clr = st.columns(2)
+    with col_dl:
+        st.download_button(
+            label="📥 Download File .txt", 
+            data=file_gabungan, 
+            file_name="EZ_Reference_Riset.txt"
+        )
+    with col_clr:
+        if st.button("🗑️ Kosongkan Semua"):
+            st.session_state['daftar_artikel'] = []
+            st.rerun()
+
+# --- FOOTER ---
+st.markdown("---")
+st.info("**Tentang Laman Ini:**")
+st.caption("Laman ini mempermudah pengumpulan referensi artikel internet tanpa membuang waktu membaca satu per satu. File .txt yang diunduh bisa dimasukkan ke LLM AI (ChatGPT, Gemini, Claude) untuk dijelaskan ulang.")
