@@ -80,4 +80,8 @@ if st.session_state['daftar_artikel']:
 # Deskripsi
 st.markdown("---")
 st.info("**Tentang Laman Ini:**")
-st.caption("Laman ini berguna untuk mengumpulkan banyak artikel menjadi satu file .txt agar mudah dianalisis oleh AI (ChatGPT, Gemini, dsb), menghemat waktu baca tanpa kehilangan esensi referensi.")
+st.caption("Laman ini berguna untuk kamu yang suka mencari referensi melalui banyak artikel yang ada di internet, 
+tanpa mengorbankan waktu untuk membacanya satu per satu. File .txt yang kamu download, 
+bisa kamu masukkan ke LLM AI (seperti ChatGPT, Gemini, Claude, dll) untuk menjelaskan ulang apa 
+yang ada dalam referensi kamu tadi. Dengan itu, kamu bisa lebih mudah memahami referensi yang kamu pilih, 
+tanpa mengorbankan banyak waktu dan bingung memahami isi bacaan.")
