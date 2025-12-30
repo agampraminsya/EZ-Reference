@@ -82,7 +82,7 @@ if st.session_state['daftar_artikel']:
     }}
     </script>
     <button onclick="copyToClipboard()" style="
-        background-color: #4CAF50;
+        background-color: #480945;
         color: white;
         padding: 10px 20px;
         border: none;
@@ -91,12 +91,12 @@ if st.session_state['daftar_artikel']:
         font-size: 16px;
         width: 100%;
         margin-bottom: 10px;
-    ">📋 Copy to Clipboard (Otomatis)</button>
+    ">📋 Copy to Clipboard</button>
     """
     components.html(copy_code, height=60)
 
     st.text_area(
-        label="Hasil Teks (Visualisasi):", 
+        label="Hasil Teks:", 
         value=file_gabungan, 
         height=300
     )
