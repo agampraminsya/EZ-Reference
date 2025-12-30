@@ -1,6 +1,5 @@
 streamlit
 trafilatura
 cloudscraper
-requests
 lxml
 brotli
