@@ -82,7 +82,7 @@ if st.session_state['daftar_artikel']:
     }}
     </script>
     <button onclick="copyToClipboard()" style="
-        background-color: #480945;
+        background-color: #464646;
         color: white;
         padding: 10px 20px;
         border: none;
