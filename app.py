@@ -6,7 +6,7 @@ import streamlit.components.v1 as components
 st.set_page_config(page_title="EZ-Reference", page_icon="📝")
 
 st.title("📝 EZ-Reference: Multi-Source Collector")
-st.caption(f"EZ-Reference: Partner resetmu | by @denmasagam v1.0")
+st.caption(f"EZ-Reference: Partner risetmu | by @denmasagam v1.0")
 
 if 'daftar_artikel' not in st.session_state:
     st.session_state['daftar_artikel'] = []
