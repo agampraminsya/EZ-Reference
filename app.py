@@ -1,98 +1,105 @@
 import streamlit as st
+import gspread
+from google.oauth2.service_account import Credentials
 import trafilatura
 import cloudscraper
 import streamlit.components.v1 as components
+from datetime import datetime
 import random
 import time
 
 st.set_page_config(page_title="EZ-Reference Pro", page_icon="📝")
 
-# --- DATABASE IDENTITAS (RANDOM AGENT) ---
-USER_AGENTS = [
-    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
-    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36',
-    'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
-    'Mozilla/5.0 (iPhone; CPU iPhone OS 17_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1 Mobile/15E148 Safari/604.1',
-    'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)'
-]
+# --- KONEKSI DATABASE GOOGLE SHEETS ---
+@st.cache_resource
+def connect_to_sheets():
+    scope = ["https://www.googleapis.com/auth/spreadsheets"]
+    creds = Credentials.from_service_account_info(st.secrets["gcp_service_account"], scopes=scope)
+    client = gspread.authorize(creds)
+    # PASTIKAN NAMA SHEET INI SAMA DENGAN YANG KAMU BUAT
+    return client.open("Database_EZ_Reference").sheet1
 
-st.title("📝 EZ-Reference Pro (Anti-Bot Edition)")
-st.caption("Batas: 10 Artikel per Sesi | Max 20 Artikel per Hari")
+def get_user_ip():
+    # Mengambil IP asli user di Streamlit Cloud
+    return st.context.headers.get("X-Forwarded-For", "127.0.0.1").split(",")[0]
 
-# Inisialisasi State
-if 'daftar_artikel' not in st.session_state:
-    st.session_state['daftar_artikel'] = []
-if 'total_generated' not in st.session_state:
-    st.session_state['total_generated'] = 0
+def check_daily_limit(ip):
+    try:
+        sheet = connect_to_sheets()
+        today = datetime.now().strftime("%Y-%m-%d")
+        records = sheet.get_all_records()
+        count = sum(1 for row in records if str(row['ip_address']) == ip and str(row['tanggal']) == today)
+        return count
+    except:
+        return 0
 
-# --- CEK COOLDOWN GLOBAL (SIMULASI) ---
-if st.session_state['total_generated'] >= 20:
-    st.error("🚨 Kamu sudah mencapai batas maksimal 20 artikel per hari. Silakan kembali besok!")
-    st.stop() # Hentikan aplikasi untuk user ini
+def log_to_sheets(ip, nama_web, url):
+    try:
+        sheet = connect_to_sheets()
+        today = datetime.now().strftime("%Y-%m-%d")
+        sheet.append_row([today, ip, nama_web, url])
+    except:
+        pass
 
-# --- FORM INPUT ---
-with st.form(key='input_form', clear_on_submit=True):
-    st.subheader("➕ Tambah Sumber Baru")
+# --- LOGIKA APLIKASI ---
+user_ip = get_user_ip()
+usage_count = check_daily_limit(user_ip)
+
+st.title("📝 EZ-Reference: Anti-Curang Edition")
+st.caption(f"IP Kamu: {user_ip} | Penggunaan Hari Ini: {usage_count}/20")
+
+if usage_count >= 20:
+    st.error("🚨 Batas 20 artikel per hari tercapai. Sistem mencatat IP kamu. Silakan kembali besok!")
+    st.stop()
+
+if 'daftar' not in st.session_state:
+    st.session_state['daftar'] = []
+
+# Form Input
+with st.form(key='my_form', clear_on_submit=True):
     nama_web = st.text_input("Nama Website")
     url = st.text_input("Link Artikel")
-    submit_button = st.form_submit_button(label="Tambahkan ke Daftar")
-
-    if submit_button:
-        # Cek Batasan Sesi (10 Artikel)
-        if len(st.session_state['daftar_artikel']) >= 10:
-            st.warning("⚠️ Batas maksimal per sesi adalah 10 artikel. Silakan download dulu, lalu hapus daftar.")
+    if st.form_submit_button("Tambahkan ke Daftar"):
+        if len(st.session_state['daftar']) >= 10:
+            st.warning("Maksimal 10 artikel per sesi download.")
         elif nama_web and url:
-            with st.spinner('Sedang memproses... (Memberikan jeda agar aman)'):
+            with st.spinner('Menyamar sebagai Googlebot...'):
+                time.sleep(random.uniform(1, 2)) # Jeda manusiawi
+                scraper = cloudscraper.create_scraper()
+                headers = {'User-Agent': 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)', 'Referer': 'https://www.google.com/'}
                 try:
-                    # Taktik 1: Jeda Acak (Human-like behavior)
-                    time.sleep(random.uniform(1, 3))
-                    
-                    # Taktik 2: Pilih Identitas Acak
-                    agent = random.choice(USER_AGENTS)
-                    scraper = cloudscraper.create_scraper()
-                    headers = {
-                        'User-Agent': agent,
-                        'Referer': 'https://www.google.com/',
-                    }
-                    
-                    response = scraper.get(url, headers=headers, timeout=15)
-                    
-                    if response.status_code == 200:
-                        teks = trafilatura.extract(response.text)
+                    res = scraper.get(url, headers=headers, timeout=15)
+                    if res.status_code == 200:
+                        teks = trafilatura.extract(res.text)
                         if teks:
-                            st.session_state['daftar_artikel'].append({'nama': nama_web, 'isi': teks, 'url': url})
-                            st.session_state['total_generated'] += 1
-                            st.toast(f"✅ Berhasil! (Identitas: {agent[:20]}...)")
-                        else:
-                            st.error("Teks tidak terbaca.")
-                    else:
-                        st.error(f"Ditolak Website (Status: {response.status_code})")
-                except Exception as e:
-                    st.error(f"Kesalahan: {e}")
-        else:
-            st.warning("Isi data dulu ya, Gam!")
+                            st.session_state['daftar'].append({'nama': nama_web, 'isi': teks, 'url': url})
+                            log_to_sheets(user_ip, nama_web, url) # Catat ke Google Sheets
+                            st.rerun()
+                        else: st.error("Teks tidak terbaca.")
+                    else: st.error(f"Ditolak (Status {res.status_code})")
+                except Exception as e: st.error(f"Error: {e}")
 
-# --- MANAJEMEN DAFTAR ---
-if st.session_state['daftar_artikel']:
+# --- OUTPUT & MANAJEMEN ---
+if st.session_state['daftar']:
     st.divider()
-    file_gabungan = ""
-    for index, item in enumerate(st.session_state['daftar_artikel']):
+    gabungan = ""
+    for i, item in enumerate(st.session_state['daftar']):
         c1, c2 = st.columns([0.8, 0.2])
-        c1.write(f"**{index+1}. {item['nama']}**")
-        if c2.button("Hapus", key=f"del_{index}"):
-            st.session_state['daftar_artikel'].pop(index)
+        c1.write(f"**{i+1}. {item['nama']}**")
+        if c2.button("Hapus", key=f"h_{i}"):
+            st.session_state['daftar'].pop(i)
             st.rerun()
-        file_gabungan += f"Sumber: {item['nama']}\nURL: {item['url']}\n\n{item['isi']}\n\n{'='*50}\n\n"
+        gabungan += f"Sumber: {item['nama']}\nURL: {item['url']}\n\n{item['isi']}\n\n{'='*50}\n\n"
 
-    # Tombol Copy (JS)
-    copy_js = f"""<script>function copy() {{ navigator.clipboard.writeText(`{file_gabungan}`); alert('Teks tersalin!'); }}</script>
-    <button onclick="copy()" style="width:100%; padding:10px; background:#4CAF50; color:white; border:none; border-radius:5px;">📋 Copy Semua Teks</button>"""
-    components.html(copy_js, height=60)
+    # Tombol Copy JS
+    js_copy = f"""<script>function copy() {{ navigator.clipboard.writeText(`{gabungan}`); alert('Tersalin!'); }}</script>
+    <button onclick="copy()" style="width:100%; padding:10px; background:#4CAF50; color:white; border:none; border-radius:5px; cursor:pointer;">📋 Copy Semua ke Clipboard</button>"""
+    components.html(js_copy, height=60)
     
-    st.download_button("📥 Download .txt", data=file_gabungan, file_name="Riset_Referensi.txt")
-    if st.button("🗑️ Bersihkan Sesi"):
-        st.session_state['daftar_artikel'] = []
+    st.download_button("📥 Download .txt", data=gabungan, file_name="Riset_Referensi.txt")
+    if st.button("🗑️ Kosongkan Sesi"):
+        st.session_state['daftar'] = []
         st.rerun()
 
 st.markdown("---")
-st.caption("Peringatan: Alat ini menggunakan rotasi identitas untuk keamanan IP.")
+st.info("**Deskripsi:** Laman ini membantu pengumpulan referensi cepat melalui untuk dianalisis lebih lanjut oleh AI. Batas 20 artikel/hari diterapkan untuk menjaga kesehatan IP server.")
