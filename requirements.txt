@@ -1,5 +1,7 @@
 streamlit
 trafilatura
 cloudscraper
+gspread
+google-auth
 lxml
 brotli
