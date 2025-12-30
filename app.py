@@ -13,18 +13,23 @@ st.set_page_config(page_title="EZ-Reference Pro", page_icon="📝")
 # --- KONEKSI DATABASE ---
 @st.cache_resource
 def connect_to_sheets():
-    scope = ["https://www.googleapis.com/auth/spreadsheets"]
+    # Menambahkan scope Google Drive agar gspread bisa mencari nama file
+    scope = [
+        "https://www.googleapis.com/auth/spreadsheets",
+        "https://www.googleapis.com/auth/drive"
+    ]
     try:
+        # Mengambil kredensial dari Streamlit Secrets
         creds = Credentials.from_service_account_info(st.secrets["gcp_service_account"], scopes=scope)
         client = gspread.authorize(creds)
-        # Pastikan nama di bawah ini sama persis dengan nama file Google Sheet kamu
+        # Nama file Google Sheet harus persis sama
         return client.open("Database_EZ_Reference").sheet1
     except Exception as e:
         st.error(f"Gagal koneksi ke Database: {e}")
         return None
 
 def get_user_ip():
-    # Mengambil IP tanpa menampilkannya di UI
+    # Mendapatkan IP user tanpa menampilkannya di layar (Privasi)
     return st.context.headers.get("X-Forwarded-For", "127.0.0.1").split(",")[0]
 
 def check_daily_limit(ip):
@@ -33,7 +38,6 @@ def check_daily_limit(ip):
         try:
             today = datetime.now().strftime("%Y-%m-%d")
             records = sheet.get_all_records()
-            # Menghitung berapa kali IP ini muncul hari ini
             count = sum(1 for row in records if str(row.get('ip_address')) == ip and str(row.get('tanggal')) == today)
             return count
         except:
@@ -45,21 +49,19 @@ def log_to_sheets(ip, nama_web, url):
     if sheet:
         try:
             today = datetime.now().strftime("%Y-%m-%d")
-            # Menambahkan baris baru ke database
             sheet.append_row([today, ip, nama_web, url])
-        except Exception as e:
-            st.error(f"Gagal mencatat ke database: {e}")
+        except:
+            pass
 
-# --- LOGIKA APLIKASI ---
+# --- LOGIKA UTAMA ---
 user_ip = get_user_ip()
 usage_count = check_daily_limit(user_ip)
 
 st.title("📝 EZ-Reference Pro")
-# PRIVASI: IP tidak lagi ditampilkan di caption
 st.caption(f"Sisa Kuota Harian: {20 - usage_count} artikel lagi")
 
 if usage_count >= 20:
-    st.error("🚨 Batas penggunaan harian (20 artikel) sudah tercapai. Silakan kembali besok!")
+    st.error("🚨 Batas harian 20 artikel tercapai. Silakan kembali besok!")
     st.stop()
 
 if 'daftar' not in st.session_state:
@@ -76,7 +78,7 @@ with st.form(key='my_form', clear_on_submit=True):
         if len(st.session_state['daftar']) >= 10:
             st.warning("Maksimal 10 artikel per sesi download.")
         elif nama_web and url:
-            with st.spinner('Memproses referensi...'):
+            with st.spinner('Memproses...'):
                 time.sleep(random.uniform(1, 2))
                 scraper = cloudscraper.create_scraper()
                 headers = {
@@ -89,16 +91,15 @@ with st.form(key='my_form', clear_on_submit=True):
                         teks = trafilatura.extract(res.text)
                         if teks:
                             st.session_state['daftar'].append({'nama': nama_web, 'isi': teks, 'url': url})
-                            # CATAT KE GOOGLE SHEETS
                             log_to_sheets(user_ip, nama_web, url)
                             st.rerun()
-                        else: st.error("Teks artikel tidak terbaca.")
-                    else: st.error(f"Akses ditolak (Status {res.status_code})")
-                except Exception as e: st.error(f"Error teknis: {e}")
+                        else: st.error("Teks tidak terbaca.")
+                    else: st.error(f"Ditolak (Status {res.status_code})")
+                except Exception as e: st.error(f"Error: {e}")
         else:
             st.warning("Mohon isi semua kolom.")
 
-# --- MANAJEMEN DAFTAR ---
+# --- OUTPUT ---
 if st.session_state['daftar']:
     st.divider()
     gabungan = ""
@@ -110,7 +111,7 @@ if st.session_state['daftar']:
             st.rerun()
         gabungan += f"Sumber: {item['nama']}\nURL: {item['url']}\n\n{item['isi']}\n\n{'='*50}\n\n"
 
-    # Tombol Copy JS
+    # Tombol Copy Otomatis
     js_copy = f"""<script>function copy() {{ navigator.clipboard.writeText(`{gabungan}`); alert('Teks disalin!'); }}</script>
     <button onclick="copy()" style="width:100%; padding:10px; background:#4CAF50; color:white; border:none; border-radius:5px; cursor:pointer;">📋 Copy ke Clipboard</button>"""
     components.html(js_copy, height=60)
@@ -121,4 +122,4 @@ if st.session_state['daftar']:
         st.rerun()
 
 st.markdown("---")
-st.info("**Tentang Laman:** Membantu mengumpulkan banyak referensi internet dalam satu file untuk diolah AI. Data penggunaan dicatat untuk keamanan server.")
+st.info("**Tentang:** Alat bantu risetmu")
