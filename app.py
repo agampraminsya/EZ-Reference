@@ -61,7 +61,7 @@ if st.session_state['daftar_artikel']:
         st.download_button(
             label="📥 Download Semua (.txt)",
             data=file_gabungan,
-            file_name="Semua_Referensi_MNY.txt",
+            file_name="Semua_Referensi.txt",
             mime="text/plain"
         )
     
