@@ -1,8 +1,9 @@
 import streamlit as st
 import trafilatura
 import cloudscraper
+import streamlit.components.v1 as components
 
-st.set_page_config(page_title="EZ-Reference Pro", page_icon="📝")
+st.set_page_config(page_title="EZ-Reference", page_icon="📝")
 
 st.title("📝 EZ-Reference: Multi-Source Collector")
 st.caption(f"EZ-Reference: Partner resetmu | by @denmasagam v1.0")
@@ -13,13 +14,13 @@ if 'daftar_artikel' not in st.session_state:
 # --- FORM INPUT ---
 with st.form(key='input_form', clear_on_submit=True):
     st.subheader("➕ Tambah Sumber Baru")
-    nama_web = st.text_input("Nama Website (Misal: Nature, BBC, Kompas.)")
+    nama_web = st.text_input("Nama Website (Misal: Nature, BBC, Kompas)")
     url = st.text_input("Link Artikel")
     submit_button = st.form_submit_button(label="Tambahkan ke Daftar")
 
     if submit_button:
         if nama_web and url:
-            with st.spinner('Menjalankan protokol Googlebot...'):
+            with st.spinner('Sabar yaa, masih diproses.'):
                 try:
                     scraper = cloudscraper.create_scraper()
                     headers = {
@@ -39,9 +40,9 @@ with st.form(key='input_form', clear_on_submit=True):
                             })
                             st.toast(f"✅ {nama_web} berhasil dikoleksi!", icon="🚀")
                         else:
-                            st.error("Teks tidak terbaca. Web mungkin menggunakan skrip dinamis berat.")
+                            st.error("Teks tidak terbaca, web ini memiliki sistem pengaman tertentu. Coba pilih web lain.")
                     else:
-                        st.error(f"Status {response.status_code}: Website ini memblokir akses otomatis.")
+                        st.error(f"Status {response.status_code}: Website ini memblokir akses kami, mohon maaf ya. Coba pilih web lain.")
                 except Exception as e:
                     st.error(f"Kesalahan teknis: {e}")
         else:
@@ -53,7 +54,6 @@ if st.session_state['daftar_artikel']:
     st.subheader(f"🗂️ Koleksi Riset ({len(st.session_state['daftar_artikel'])} Sumber)")
     
     file_gabungan = ""
-    # Menampilkan daftar satu per satu dengan tombol hapus
     for index, item in enumerate(st.session_state['daftar_artikel']):
         c_info, c_del = st.columns([0.8, 0.2])
         with c_info:
@@ -64,16 +64,41 @@ if st.session_state['daftar_artikel']:
                 st.session_state['daftar_artikel'].pop(index)
                 st.rerun()
         
-        # Menyusun format teks gabungan
         file_gabungan += f"Ini sumber dari {item['nama']}:\nURL: {item['url']}\n\n{item['isi']}\n\n"
         file_gabungan += "="*60 + "\n\n"
 
-    # --- KOTAKAN HASIL (COPY-PASTE READY) ---
-    st.subheader("📋 Hasil Gabungan (Siap Copy)")
+    # --- KOTAKAN HASIL & TOMBOL COPY ---
+    st.subheader("Hasil Copy-an")
+    
+    # Tombol Copy Menggunakan JavaScript
+    # Link Streamlit Cloud sudah otomatis HTTPS, jadi fitur clipboard ini akan jalan.
+    copy_code = f"""
+    <script>
+    function copyToClipboard() {{
+        const text = `{file_gabungan}`;
+        navigator.clipboard.writeText(text).then(() => {{
+            alert('Teks berhasil disalin ke Clipboard!');
+        }});
+    }}
+    </script>
+    <button onclick="copyToClipboard()" style="
+        background-color: #4CAF50;
+        color: white;
+        padding: 10px 20px;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 16px;
+        width: 100%;
+        margin-bottom: 10px;
+    ">📋 Copy to Clipboard (Otomatis)</button>
+    """
+    components.html(copy_code, height=60)
+
     st.text_area(
-        label="Klik di dalam kotak lalu Ctrl+A dan Ctrl+C (atau tahan di HP)", 
+        label="Hasil Teks (Visualisasi):", 
         value=file_gabungan, 
-        height=400
+        height=300
     )
 
     st.write("---")
@@ -89,9 +114,7 @@ if st.session_state['daftar_artikel']:
             st.session_state['daftar_artikel'] = []
             st.rerun()
 
-# --- FOOTER & DESKRIPSI ---
+# --- FOOTER ---
 st.markdown("---")
 st.info("**Tentang Laman Ini:**")
-st.caption("""
-Laman ini mempermudah pengumpulan referensi artikel internet tanpa membuang waktu membaca satu per satu. File .txt yang diunduh bisa dimasukkan ke LLM AI (ChatGPT, Gemini, Claude) untuk dijelaskan ulang..
-""")
+st.caption("Laman ini mempermudah pengumpulan referensi artikel internet tanpa membuang waktu membaca satu per satu. File .txt yang diunduh bisa dimasukkan ke LLM AI (ChatGPT, Gemini, Claude) untuk dijelaskan ulang.")
